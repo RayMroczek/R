@@ -1,0 +1,108 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+View(Oakland)
+
+library(tidyverse)
+
+library(readr)
+Oakland <- read_csv("Oakland.csv", skip = 1)
+View(Oakland)
+  
+XX_2plusSchools <- Oakland %>%
+  filter(Oakland$XXled_2yr==1)
+
+#making smaller dataset
+myvars <- c("schoolname", "XXled_2yr", "chng_comb_black", "chng_comb_latinx", "chng_comb_white")
+myvars2 <- c("schoolname", "metp2019_comb_black", "metp2019_comb_latinx", "metp2019_comb_white")
+Oakland_small_chng <- Oakland[myvars]
+Oakland_small_prof <- Oakland[myvars2]
+
+
+XX_long <- gather(Oakland_small_chng, race_eth, chng_comb, chng_comb_black:chng_comb_white, factor_key=TRUE)
+
+XX_long$race_eth2 <- ifelse((XX_long$race_eth == "chng_comb_black"), "Black", 
+ifelse((XX_long$race_eth == "chng_comb_latinx"), "LatinX",
+ifelse((XX_long$race_eth == "chng_comb_white"), "white",NA)))
+
+View(XX_long)
+
+#gathering prof
+XX_long2 <-gather(Oakland_small_prof, race_eth, prof_comb, metp2019_comb_black:metp2019_comb_white, factor_key=TRUE)
+
+View(XX_long2)
+
+XX_long2$race_eth2 <- ifelse((XX_long2$race_eth == "metp2019_comb_black"), "Black", 
+ifelse((XX_long2$race_eth == "metp2019_comb_latinx"), "LatinX",
+ifelse((XX_long2$race_eth == "metp2019_comb_white"), "white",NA)))
+
+merge_XX <- dplyr::full_join(XX_long, XX_long2, by = c("schoolname" = "schoolname", 
+                                                    "race_eth2" = "race_eth2"))
+View(merge_XX)
+
+#droping bad vars
+drop <- c("race_eth.x","race_eth.y")
+merge_XX = merge_XX[,!(names(merge_XX) %in% drop)]
+
+#creating numeric var for race/eth
+merge_XX$race_eth3 <- ifelse((merge_XX$race_eth2 == "black"), 1, 
+ifelse((merge_XX$race_eth2 == "latinX"), 2,
+ifelse((merge_XX$race_eth2 == "white"), 3,NA)))
+
+View(merge_XX)
+
+merge_XX_oXXy <- merge_XX %>%
+  filter(merge_XX$XXled_2yr==1)
+
+#http://www.sthda.com/english/wiki/ggplot2-colors-how-to-change-colors-automatically-and-manually for colors 
+
+XXplot <- ggplot(merge_XX_oXXy)+
+  aes(x=prof_comb, y=chng_comb, color=race_eth2)+
+  geom_point(size = 5)+
+  #geom_text(aes(label=schoolname))+
+  #alameda avg. rates for white students
+  geom_vline(xintercept=69.04, color = "#DE8957")+
+  geom_hline(yintercept=0.57, color = "#DE8957")+
+  theme_minimal()+
+  ylab("One-Year Proficiency Gains (FY18 to FY19)")+
+  xlab("2019 Combined Proficiency Rate")
+
+XXplot + scale_color_manual(values=c("#438E6E", "#008ED6", "#DE8957"))+
+  theme(legend.position="top", axis.title.x = element_text(face="bold"), axis.title.y = element_text(face="bold"), legend.text = element_text(size=14))+
+  labs(color=" ")
+
+
+
+#getting averages for lines in graph
+View(Oakland)
+summary(Oakland$alam_metp2019_comb_white)
+summary(Oakland$alam_chng_comb_white)
+
+#19% and 12% ELA and Math proficient, Black, Oakland
+#24% and 17% ELA and Math proficient, LatinX, Oakland
+#73% and 65% White, Oakland
+
+
+#generating a flag var
+Oakland$XXled <- NA
+Oakland$XXled <- ifelse((Oakland$XXled_1yr==1 | Oakland$XXled_2yr==1), 1, NA)
+Oakland$XXled <- ifelse((is.na(Oakland$XXled_1yr) & is.na(Oakland$XXled_2yr)), 0, Oakland$XXled)
+
+table(Oakland$XXled)
+
+lm(formula = XXled ~ chng_comb_black, data=Oakland)
+
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, uXXike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.

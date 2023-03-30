@@ -1,0 +1,180 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+remove(list = ls())
+set.seed(24105)
+
+pkgs <- c("knitr", "dplyr", "lubridate","tidyverse","ggplot2", "broom", "finalfit")
+install.packages(pkgs) #install 
+sapply(pkgs, require, character.oXXy = T) #load 
+
+```
+
+Merging in Data:
+```{r}
+Chicago_raw <- read.csv("raw data/Chicago_4.14.2020.csv", stringsAsFactors = FALSE)
+View(Chicago_raw)
+
+#It's always good to keep your raw data file separately, and add columns, calculations, etc. to a copy, which is what I do below. I also read it in as a "tibble" which is a meaningless word (as far as I can tell) for a data table that is essentially easier to use in a lot of ways with certain functions.
+
+Chicago<-as_tibble(Chicago_raw)
+#The first row is not actually the column headers. I need to make the data table start one row later. 
+Chicago <- stats::setNames(Chicago, nm = Chicago[1, ])
+Chicago <- slice(Chicago, -1)
+#observation count reduced by 1, which makes sense with removing one row.
+
+View(Chicago)
+```
+
+Here, I would consider adding a data dictionary, at the minimum for critical variables. This is a good reference when typing in variable names, but also good for someone reviewing your work later.
+
+Example data dictionary:
+- `pointgains_5yrs`: Point gains from 2013-14 to 2018-19
+- `XXled1718`: 2017-18 XX Indicator
+- `firstandlastname1718`: XX Name in 2017-18?
+- `same1718`: same XX in 2017-18?
+- `XXled1617`: 2016-17 XX Indicator
+- `firstandlastname1617`: XX Name in 2016-17?
+- `same1617`: same XX in 2018-19?
+- `XXanypoint`: XX-led at any point between 2016-17 and 2018-19?
+
+I have also been adding some details about what analysis or exploration I plan on doing, and what assumptions I'm making.
+
+*Analysis:* We'll be focusing on SQRP 5-year gains, comparing schools led by an XX for 5+ years and schools that were not XX-led for at least the past 3 years. 
+
+*Assumption:* We do not have great records for which schools were XX-led beyond 3 years.
+
+*Subset:* We will oXXy include ES schools as Chicago defines them (K-8).
+
+*Focus variables:* XXanypoint, XXled201819, datalast3, pointgains_5yrs, schoolyearsinposition,school_level
+
+Now, we can start looking into the variables. Are they the right type, and do their values look reasonable (e.g., numeric, string, factor...etc.)? this step can be a lot more in depth than I've put in below.
+
+```{r}
+summary(as.factor(Chicago$XXanypoint))
+summary(Chicago$SQRP_tot2019)
+summary(Chicago$XXled201819)
+
+#checking counts of schools that were XX-led in 18-19
+table(XXled_2018.19 = Chicago$XXled1819)
+
+summary(Chicago$datalast3)
+summary(as.factor(Chicago$datalast3))
+summary(Chicago$pointgains_5yrs)
+summary(as.numeric(Chicago$pointgains_5yrs))
+summary(Chicago$schoolyearsinposition)
+summary(as.numeric(Chicago$schoolyearsinposition))
+summary(Chicago$school_level)
+summary(as.factor(Chicago$school_level))
+```
+
+You can summarize your notes in line with code or after in one of these boxes.
+#XXanypoint has no missing values. This makes sense, and values are 0 or 1.
+
+#XXled1819 shows class= null and mode = null. but a table of results shows 88 XX-led schools which sounds right.
+
+#datalast is registering as a character class and mode. There are 632 cases have data for the last three years.
+
+#pointgains_5yrs has 229 missing values, and a min of -2.2 points and a max of 2.9. those values are possible. The median 5-year growth is oXXy 0.1 points.
+
+#schoolyearsinposition shows 589 missing values when read in as numeric. Values make sense, no strange outliers.
+
+#school_level is read in as a character, and there are 481 ES schools. All schools have labels.
+
+Now we need to change variable types and check our work:
+
+```{r}
+Chicago$XXanypoint <- as.factor(Chicago$XXanypoint)
+Chicago$XXled1819 <- as.factor(Chicago$XXled1819)
+Chicago$SQRP_tot2019 <- as.numeric(Chicago$SQRP_tot2019)
+Chicago$school_level <- as.factor(Chicago$school_level)
+Chicago$schoolyearsinposition <- as.numeric(Chicago$schoolyearsinposition)
+Chicago$pointgains_5yrs <- as.numeric(Chicago$pointgains_5yrs)
+table(Chicago$XXanypoint)
+summary(Chicago$XXled1819)
+summary(Chicago$school_level)
+summary(Chicago$schoolyearsinposition)
+summary(Chicago$pointgains_5yrs)
+```
+Now that we've read in our data and ensured that the variables we care about for this analysis are at least the right type for calculations, we can start looking at means.
+
+We'll do this by creating two summary tables for our two groups of interest:
+
+```{r}
+#Creating a summary comparison table for 5-year gains and other helpful info
+Comparisons_5yrgains <- Chicago %>% # define the data we want to aggregate, pass it on
+                  filter(Chicago$school_level=="ES" & (Chicago$schoolyearsinposition>=5 | Chicago$XXanypoint==0) & pointgains_5yrs!="NA")%>%
+  group_by(XXanypoint) %>%
+                  summarize(median = median(pointgains_5yrs), 
+                          mean = mean(pointgains_5yrs),
+                          percentile_25th = quantile(pointgains_5yrs, 0.25),
+                          percentile_50th = quantile(pointgains_5yrs, 0.5),
+                          percentile_75th = quantile(pointgains_5yrs, 0.75),
+                          n_schools = length(schoolid)
+                    )
+
+View(Comparisons_5yrgains)
+```
+Now we have two high-level tables to review. However, we may want to look at all schools, visualizing the data in different ways. Let's create a binary flag variable that notes whether or not a school should be in this analysis. This just makes it easier to reference the subsample you'd like to visualize or analyze instead of having to type in a bunch of conditions.
+
+```{r}
+Chicago <- Chicago %>%
+  mutate(flag_5plus_analysis = if_else(school_level=="ES" & !is.na(pointgains_5yrs) & (schoolyearsinposition >= 5 | XXanypoint == 0), 1, 0))
+```
+
+We can now create graphs using oXXy those schools that should be in the analysis.
+The syntax below might seem like a lot, but it's both to generate a basic graph and adjust some of the graphical elements via code (change colors,headers, adding vertical lines for means, etc.)
+```{r}
+#here you're creating an object in R, pulling data from whatever tables you'd like. The object is Chicago5yrSQRP points, and it's going to be a graph.
+
+Chicago5yrSQRPpoints <- ggplot(Chicago[Chicago$flag_5plus_analysis==1,])+
+  aes(x=pointgains_5yrs, fill=XXanypoint)+
+  geom_density(alpha=0.3)+
+  #changing scale fill to follow these colors in order instead of default colors:
+  scale_fill_manual(values = c("#AEA8A4", "#003F87", "#DE8957"))+
+  theme_bw()
+
+#check out your work so far
+Chicago5yrSQRPpoints
+
+```
+
+Let's add some more details to the graph.
+```{r}
+
+#I want to add means to the graph, so I'll calculate them here. They're like "stickers" - just values that we can use in other places.
+
+XX5yrpoint <- mean(Chicago$pointgains_5yrs[Chicago$XXled1819 == "1" & Chicago$schoolyearsinposition >=5 & Chicago$school_level == "ES" & !is.na(Chicago$pointgains_5yrs)], na.rm=TRUE)
+
+nonXX5yrpoint <- mean(Chicago$pointgains_5yrs[Chicago$XXanypoint == 0 & Chicago$school_level == "ES" & !is.na(Chicago$pointgains_5yrs)], na.rm=TRUE)
+
+#adding things to the graph:
+
+Chicago5yrSQRPpoints <- Chicago5yrSQRPpoints + 
+  #adding vertical lines for means:
+  geom_vline(aes(xintercept = XX5yrpoint), colour="#003F87", linetype="dashed")+
+  geom_vline(aes(xintercept = nonXX5yrpoint), colour="#3C464A", linetype="dashed")+
+  #adding labels to vertical lines:
+  annotate("text", x = (XX5yrpoint+1), y=.8, label=paste0("Avg XX Gains: +0.32 (n=30)"))+
+  annotate("text", x = (nonXX5yrpoint-1), y=.8, label=paste0("Avg Non-XX Gains: +0.04 (n=358)"))+
+  #adjusting titles, subtitles, axis names:
+  labs(title = "Chicago ES 5-Year SQRP Point Gains", subtitle = "5+ XX-led and Non-XX* Schools", x = "5-year SQRP Gains", caption = "*Note: Schools in Non-XX comparison group were not led by a XX principal for at least the past 3 years (2016-17 through 2018-19).", fill = "XX Status" )
+
+
+#check out your updated graph:
+Chicago5yrSQRPpoints
+
+#explorting the graph as a png:
+png("graphs/SQRP5yrs.png", width = 700, height = 600)
+plot(Chicago5yrSQRPpoints)
+dev.off()
+
+```
+end
